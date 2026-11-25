@@ -1,0 +1,25 @@
+# fc-caddy: the Caddy web server / reverse proxy, on fc-os.
+# Ubuntu 26.04 only packages Caddy 2.6.2 (2022), so the official release binary is used, checked
+# against the release's published SHA-512 checksums.
+ARG OS_VERSION=ubuntu26.04
+FROM fc-os:${OS_VERSION}
+
+ARG CADDY_VERSION=2.10.2
+
+RUN cd /tmp \
+ && base="https://github.com/caddyserver/caddy/releases/download/v${CADDY_VERSION}" \
+ && file="caddy_${CADDY_VERSION}_linux_amd64.tar.gz" \
+ && curl -fsSLO "${base}/${file}" \
+ && curl -fsSLO "${base}/caddy_${CADDY_VERSION}_checksums.txt" \
+ && grep " ${file}\$" "caddy_${CADDY_VERSION}_checksums.txt" | sha512sum -c - \
+ && tar -xzf "${file}" -C /usr/local/bin caddy \
+ && chmod +x /usr/local/bin/caddy \
+ && rm -f /tmp/caddy_* \
+ && mkdir -p /data /config /etc/caddy
+
+# Caddy keeps its certificates (and its local CA for `tls internal`) under /data: mount a volume there
+ENV XDG_DATA_HOME=/data \
+    XDG_CONFIG_HOME=/config
+
+# Project images copy their Caddyfile to /etc/caddy/Caddyfile
+CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

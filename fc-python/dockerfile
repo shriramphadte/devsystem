@@ -1,0 +1,24 @@
+# fc-python: Python from Ubuntu's packages, in a venv at /opt/venv, with uv
+ARG OS_VERSION=ubuntu26.04
+FROM fc-os:${OS_VERSION}
+
+ARG PYTHON_VERSION=3.14
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python${PYTHON_VERSION} \
+    python3-venv \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# One venv for everything installed in the container; it is first on PATH
+RUN python${PYTHON_VERSION} -m venv /opt/venv
+ENV VIRTUAL_ENV=/opt/venv \
+    PATH="/opt/venv/bin:$PATH" \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+# uv installs packages into the same venv
+RUN pip install --no-cache-dir uv
+ENV UV_PROJECT_ENVIRONMENT=/opt/venv
+
+CMD ["tail", "-f", "/dev/null"]

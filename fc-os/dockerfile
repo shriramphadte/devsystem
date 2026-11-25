@@ -1,0 +1,41 @@
+# fc-os: Ubuntu LTS plus everyday dev tools. Every other friendscolony image is built on it.
+ARG OS_NAME=ubuntu
+ARG OS_VERSION=26.04
+FROM ${OS_NAME}:${OS_VERSION}
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8
+
+# Tools for working inside a container: download, edit, inspect processes and the network
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    wget \
+    git \
+    gnupg \
+    sudo \
+    nano \
+    vim \
+    less \
+    tree \
+    jq \
+    zip \
+    unzip \
+    dos2unix \
+    procps \
+    psmisc \
+    lsof \
+    net-tools \
+    iputils-ping \
+    dnsutils \
+    netcat-openbsd \
+    tzdata \
+    locales \
+    && rm -rf /var/lib/apt/lists/*
+
+# The whole H:\friendscolony folder is mounted here by the project run scripts
+WORKDIR /repository
+
+# Keep the container running; services are started by hand with docker exec
+CMD ["tail", "-f", "/dev/null"]

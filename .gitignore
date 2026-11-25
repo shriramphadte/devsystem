@@ -1,0 +1,2 @@
+# The friendscolony dev root CA private key: never commit it
+fc-caddy/fc-ca/root.key

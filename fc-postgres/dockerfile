@@ -1,0 +1,57 @@
+# fc-postgres: PostgreSQL + pgAdmin 4 in one container, on fc-os. Project database images build FROM it.
+ARG OS_VERSION=ubuntu26.04
+FROM fc-os:${OS_VERSION}
+
+# PostgreSQL major version. Ubuntu's own package is used when it has it (26.04 ships 18);
+# otherwise it comes from the PostgreSQL project's apt repo (PGDG).
+ARG PG_VERSION=18
+
+ENV LANG=en_US.utf8 \
+    PGDATA=/var/lib/postgresql/data
+
+# gosu drops root privileges in the entrypoint. The cluster Ubuntu creates on install is dropped:
+# the entrypoint creates its own in $PGDATA on first start.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends gosu postgresql-common \
+ && if ! apt-cache show "postgresql-${PG_VERSION}" >/dev/null 2>&1; then \
+        /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y ; \
+    fi \
+ && apt-get install -y --no-install-recommends "postgresql-${PG_VERSION}" \
+ && localedef -i en_US -c -f UTF-8 en_US.UTF-8 \
+ && ln -s "/usr/lib/postgresql/${PG_VERSION}/bin" /usr/local/pgbin \
+ && echo "${PG_VERSION}" > /etc/fc-pg-major \
+ && (pg_dropcluster --stop "${PG_VERSION}" main || true) \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV PATH=/usr/local/pgbin:$PATH
+
+# pgAdmin 4 (web UI) in its own venv, served by gunicorn on port 5050 inside the same container.
+# The entrypoint starts it next to postgres unless PGADMIN_ENABLED=false.
+# 9.19's wheel on PyPI is missing the built web UI (static/js/generated), so it is pinned to 9.18.
+ARG PGADMIN_VERSION=9.18
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 python3-venv \
+ && python3 -m venv /opt/pgadmin \
+ && /opt/pgadmin/bin/pip install --no-cache-dir "pgadmin4==${PGADMIN_VERSION}" gunicorn \
+ && ln -s "$(ls -d /opt/pgadmin/lib/python3*/site-packages/pgadmin4)" /opt/pgadmin/app \
+ && test -f /opt/pgadmin/app/pgAdmin4.py \
+ && ls /opt/pgadmin/app/pgadmin/static/js/generated/*.js >/dev/null \
+ && rm -rf /var/lib/apt/lists/*
+COPY pgadmin/config_local.py /opt/pgadmin/app/config_local.py
+
+RUN mkdir -p "$PGDATA" /var/run/postgresql /docker-entrypoint-initdb.d /var/lib/pgadmin \
+ && chown -R postgres:postgres /var/lib/postgresql /var/run/postgresql /var/lib/pgadmin \
+ && chmod 700 "$PGDATA"
+
+COPY fc-entrypoint.sh /usr/local/bin/fc-entrypoint.sh
+RUN dos2unix /usr/local/bin/fc-entrypoint.sh && chmod +x /usr/local/bin/fc-entrypoint.sh
+
+VOLUME ["/var/lib/postgresql/data", "/var/lib/pgadmin"]
+EXPOSE 5432 5050
+STOPSIGNAL SIGINT
+
+HEALTHCHECK --interval=10s --timeout=5s --start-period=30s --retries=5 \
+  CMD pg_isready -h 127.0.0.1 -p 5432 -U "${POSTGRES_USER:-postgres}" || exit 1
+
+ENTRYPOINT ["/usr/local/bin/fc-entrypoint.sh"]
+CMD ["postgres"]
